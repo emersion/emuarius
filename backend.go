@@ -1,6 +1,7 @@
 package emuarius
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/ChimeraCoder/anaconda"
 	"github.com/emersion/go-ostatus"
 	"github.com/emersion/go-ostatus/activitystream"
+	"github.com/emersion/go-ostatus/salmon"
 	"github.com/emersion/go-ostatus/xrd"
 )
 
@@ -28,33 +30,33 @@ func uriToUsername(uri string) string {
 }
 
 func feedPath(username string) string {
-	return "/@"+username+".atom"
+	return "/@" + username + ".atom"
 }
 
 func profileURL(username string) string {
-	return "https://twitter.com/"+username
+	return "https://twitter.com/" + username
 }
 
 type subscription struct {
-	stream *anaconda.Stream
+	stream   *anaconda.Stream
 	notifies chan<- *activitystream.Feed
 }
 
 type Backend struct {
-	api *anaconda.TwitterApi
+	api     *anaconda.TwitterApi
 	rootURL string
-	domain string
-	topics map[string]*subscription
+	domain  string
+	topics  map[string]*subscription
 }
 
 func NewBackend(api *anaconda.TwitterApi, rootURL string) *Backend {
 	u, _ := url.Parse(rootURL)
 
 	return &Backend{
-		api: api,
+		api:     api,
 		rootURL: rootURL,
-		domain: u.Host,
-		topics: make(map[string]*subscription),
+		domain:  u.Host,
+		topics:  make(map[string]*subscription),
 	}
 }
 
@@ -102,6 +104,10 @@ func (be *Backend) Unsubscribe(notifies chan<- *activitystream.Feed) error {
 	return nil
 }
 
+func (be *Backend) Reply(entry *activitystream.Entry) error {
+	return errors.New("Not yet implemented") // TODO
+}
+
 func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 	username := uriToUsername(topicURL)
 
@@ -122,20 +128,20 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 	feedURL := be.rootURL + feedPath(u.ScreenName)
 
 	feed := &activitystream.Feed{
-		ID: feedURL,
-		Title: u.Name,
+		ID:       feedURL,
+		Title:    u.Name,
 		Subtitle: u.Description,
-		Logo: u.ProfileImageURL,
-		Updated: activitystream.NewTime(time.Now()), // TODO
+		Logo:     u.ProfileImageURL,
+		Updated:  activitystream.NewTime(time.Now()), // TODO
 		Link: []activitystream.Link{
 			{Rel: "self", Type: "application/atom+xml", Href: feedURL},
-			{Rel: "hub", Href: be.rootURL+ostatus.HubPath},
+			{Rel: "hub", Href: be.rootURL + ostatus.HubPath},
 		},
 		Author: &activitystream.Person{
-			ID: be.accountURI(u.ScreenName),
-			URI: be.accountURI(u.ScreenName),
-			Name: u.Name,
-			Summary: u.Description,
+			ID:         be.accountURI(u.ScreenName),
+			URI:        be.accountURI(u.ScreenName),
+			Name:       u.Name,
+			Summary:    u.Description,
 			ObjectType: activitystream.ObjectPerson,
 			Link: []activitystream.Link{
 				{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
@@ -143,8 +149,8 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 				{Rel: "header", Href: u.ProfileBannerURL},
 			},
 			PreferredUsername: u.ScreenName,
-			DisplayName: u.Name,
-			Note: u.Description,
+			DisplayName:       u.Name,
+			Note:              u.Description,
 		},
 	}
 
@@ -153,16 +159,16 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 
 		// TODO: transform tweet to HTML
 		feed.Entry = append(feed.Entry, &activitystream.Entry{
-			ID: "tag:"+be.domain+",2017-04-23:tweet:"+tweet.IdStr,
-			Title: "Tweet",
+			ID:        "tag:" + be.domain + ",2017-04-23:tweet:" + tweet.IdStr,
+			Title:     "Tweet",
 			Published: activitystream.NewTime(createdAt),
-			Updated: activitystream.NewTime(createdAt),
+			Updated:   activitystream.NewTime(createdAt),
 			Content: &activitystream.Text{
 				Type: "text/html",
 				Body: tweet.Text,
 			},
 			ObjectType: activitystream.ObjectNote,
-			Verb: activitystream.VerbPost,
+			Verb:       activitystream.VerbPost,
 		})
 	}
 
@@ -176,6 +182,14 @@ func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
 		return nil, err
 	}
 
+	// TODO: retrieve public key
+	publicKey, _ := salmon.ParsePublicKey("RSA.mVgY8RN6URBTstndvmUUPb4UZTdwvwmddSKE5z_jvKUEK6yk1u3rrC9yN8k6FilGj9K0eeUPe2hf4Pj-5CmHww.AQAB")
+
+	publicKeyURL, err := salmon.PublicKeyDataURL(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
 	accountURI := be.accountURI(u.ScreenName)
 	profileURL := profileURL(u.ScreenName)
 	resource := &xrd.Resource{
@@ -183,7 +197,9 @@ func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
 		Aliases: []string{profileURL},
 		Links: []*xrd.Link{
 			{Rel: ostatus.LinkProfilePage, Type: "text/html", Href: profileURL},
-			{Rel: ostatus.LinkUpdatesFrom, Type: "application/atom+xml", Href: be.rootURL+feedPath(u.ScreenName)},
+			{Rel: ostatus.LinkUpdatesFrom, Type: "application/atom+xml", Href: be.rootURL + feedPath(u.ScreenName)},
+			{Rel: ostatus.LinkSalmon, Href: be.rootURL + ostatus.SalmonPath},
+			{Rel: ostatus.LinkMagicPublicKey, Href: publicKeyURL},
 		},
 	}
 	return resource, nil
