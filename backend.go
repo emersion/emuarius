@@ -8,7 +8,7 @@ import (
 	"github.com/ChimeraCoder/anaconda"
 	"github.com/emersion/go-ostatus"
 	"github.com/emersion/go-ostatus/activitystream"
-	"github.com/emersion/go-webfinger"
+	"github.com/emersion/go-ostatus/xrd"
 )
 
 func uriToUsername(uri string) string {
@@ -169,7 +169,7 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 	return feed, nil
 }
 
-func (be *Backend) Resource(uri string, rel []string) (*webfinger.Resource, error) {
+func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
 	username := uriToUsername(uri)
 	u, err := be.api.GetUsersShow(username, make(url.Values))
 	if err != nil {
@@ -178,10 +178,10 @@ func (be *Backend) Resource(uri string, rel []string) (*webfinger.Resource, erro
 
 	accountURI := be.accountURI(u.ScreenName)
 	profileURL := profileURL(u.ScreenName)
-	resource := &webfinger.Resource{
+	resource := &xrd.Resource{
 		Subject: accountURI,
 		Aliases: []string{profileURL},
-		Links: []*webfinger.Link{
+		Links: []*xrd.Link{
 			{Rel: ostatus.LinkProfilePage, Type: "text/html", Href: profileURL},
 			{Rel: ostatus.LinkUpdatesFrom, Type: "application/atom+xml", Href: be.rootURL+feedPath(u.ScreenName)},
 		},
