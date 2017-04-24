@@ -17,7 +17,7 @@ func main() {
 	anaconda.SetConsumerSecret("your-consumer-secret")
 	api := anaconda.NewTwitterApi("your-access-token", "your-access-token-secret")
 	be := emuarius.NewBackend(api, rootURL)
-	h := ostatus.NewHandler(be)
+	h := ostatus.NewHandler(be, rootURL)
 
 	s := &http.Server{
 		Addr: addr,
