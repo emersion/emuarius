@@ -134,8 +134,11 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 		Logo:     u.ProfileImageURL,
 		Updated:  activitystream.NewTime(time.Now()), // TODO
 		Link: []activitystream.Link{
+			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
 			{Rel: "self", Type: "application/atom+xml", Href: feedURL},
 			{Rel: "hub", Href: be.rootURL + ostatus.HubPath},
+			// TODO: rel=next
+			{Rel: ostatus.LinkSalmon, Href: be.rootURL + ostatus.SalmonPath},
 		},
 		Author: &activitystream.Person{
 			ID:         be.accountURI(u.ScreenName),
@@ -163,6 +166,10 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 			Title:     "Tweet",
 			Published: activitystream.NewTime(createdAt),
 			Updated:   activitystream.NewTime(createdAt),
+			Link: []activitystream.Link{
+				{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)+"/status/"+tweet.IdStr},
+				{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: "http://activityschema.org/collection/public"},
+			},
 			Content: &activitystream.Text{
 				Type: "text/html",
 				Body: tweet.Text,
