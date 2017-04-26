@@ -104,7 +104,7 @@ func (be *Backend) Unsubscribe(notifies chan<- *activitystream.Feed) error {
 	return nil
 }
 
-func (be *Backend) Reply(entry *activitystream.Entry) error {
+func (be *Backend) Notify(entry *activitystream.Entry) error {
 	return errors.New("Not yet implemented") // TODO
 }
 
@@ -168,7 +168,7 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 			Updated:   activitystream.NewTime(createdAt),
 			Link: []activitystream.Link{
 				{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)+"/status/"+tweet.IdStr},
-				{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: "http://activityschema.org/collection/public"},
+				{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: activitystream.CollectionPublic},
 			},
 			Content: &activitystream.Text{
 				Type: "text/html",
