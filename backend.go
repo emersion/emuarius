@@ -133,7 +133,7 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 	}
 
 	v := make(url.Values)
-	v.Set("follow", u.ScreenName)
+	v.Set("follow", u.IdStr)
 	s := be.api.PublicStreamFilter(v)
 
 	be.topics[topicURL] = &subscription{s, notifies}
