@@ -64,27 +64,89 @@ func (be *Backend) accountURI(username string) string {
 	return "acct:" + username + "@" + be.domain
 }
 
-func (be *Backend) Subscribe(topic string, notifies chan<- *activitystream.Feed) error {
-	// TODO: parse topic
-	/*u, err := url.Parse(topic)
+func (be *Backend) newFeed(u *anaconda.User) *activitystream.Feed {
+	feedURL := be.rootURL + feedPath(u.ScreenName)
+
+	return &activitystream.Feed{
+		ID:       feedURL,
+		Title:    u.Name,
+		Subtitle: u.Description,
+		Logo:     u.ProfileImageURL,
+		Updated:  activitystream.NewTime(time.Now()), // TODO
+		Link: []activitystream.Link{
+			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
+			{Rel: "self", Type: "application/atom+xml", Href: feedURL},
+			{Rel: "hub", Href: be.rootURL + ostatus.HubPath},
+			// TODO: rel=next
+			{Rel: ostatus.LinkSalmon, Href: be.rootURL + ostatus.SalmonPath},
+		},
+		Author: &activitystream.Person{
+			ID:         be.accountURI(u.ScreenName),
+			URI:        be.accountURI(u.ScreenName),
+			Name:       u.Name,
+			Email:      u.ScreenName + "@" + be.domain,
+			Summary:    u.Description,
+			ObjectType: activitystream.ObjectPerson,
+			Link: []activitystream.Link{
+				{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
+				{Rel: "avatar", Href: u.ProfileImageURL},
+				{Rel: "header", Href: u.ProfileBannerURL},
+			},
+			PreferredUsername: u.ScreenName,
+			DisplayName:       u.Name,
+			Note:              u.Description,
+		},
+	}
+}
+
+func (be *Backend) newEntryFromTweet(u *anaconda.User, tweet *anaconda.Tweet) *activitystream.Entry {
+	createdAt, _ := tweet.CreatedAtTime()
+
+	return &activitystream.Entry{
+		ID:        "tag:" + be.domain + ",2017-04-23:tweet:" + tweet.IdStr,
+		Title:     "Tweet",
+		Published: activitystream.NewTime(createdAt),
+		Updated:   activitystream.NewTime(createdAt),
+		Link: []activitystream.Link{
+			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)+"/status/"+tweet.IdStr},
+			{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: activitystream.CollectionPublic},
+		},
+		Content: &activitystream.Text{
+			Type: "text", // TODO: html
+			Lang: tweet.Lang,
+			Body: tweet.Text,
+		},
+		ObjectType: activitystream.ObjectNote,
+		Verb:       activitystream.VerbPost,
+	}
+}
+
+func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Feed) error {
+	username := uriToUsername(topicURL)
+	if username == "" {
+		return errors.New("Invalid topic")
+	}
+
+	u, err := be.api.GetUsersShow(username, make(url.Values))
 	if err != nil {
 		return err
-	}*/
+	}
 
 	v := make(url.Values)
-	v.Set("follow", "emersion_fr")
+	v.Set("follow", u.ScreenName)
 	s := be.api.PublicStreamFilter(v)
 
-	be.topics[topic] = &subscription{s, notifies}
+	be.topics[topicURL] = &subscription{s, notifies}
 
 	go func() {
 		defer close(notifies)
 
 		for update := range s.C {
-			switch update.(type) {
-			case *anaconda.EventTweet:
-			case *anaconda.EventList:
-			case *anaconda.Event:
+			switch update := update.(type) {
+			case anaconda.Tweet:
+				feed := be.newFeed(&u)
+				feed.Entry = append(feed.Entry, be.newEntryFromTweet(&u, &update))
+				notifies <- feed
 			}
 		}
 	}()
@@ -119,6 +181,9 @@ func (be *Backend) Notify(entry *activitystream.Entry) error {
 
 func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 	username := uriToUsername(topicURL)
+	if username == "" {
+		return nil, errors.New("Invalid topic")
+	}
 
 	u, err := be.api.GetUsersShow(username, make(url.Values))
 	if err != nil {
@@ -134,60 +199,10 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 		return nil, err
 	}
 
-	feedURL := be.rootURL + feedPath(u.ScreenName)
-
-	feed := &activitystream.Feed{
-		ID:       feedURL,
-		Title:    u.Name,
-		Subtitle: u.Description,
-		Logo:     u.ProfileImageURL,
-		Updated:  activitystream.NewTime(time.Now()), // TODO
-		Link: []activitystream.Link{
-			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
-			{Rel: "self", Type: "application/atom+xml", Href: feedURL},
-			{Rel: "hub", Href: be.rootURL + ostatus.HubPath},
-			// TODO: rel=next
-			{Rel: ostatus.LinkSalmon, Href: be.rootURL + ostatus.SalmonPath},
-		},
-		Author: &activitystream.Person{
-			ID:         be.accountURI(u.ScreenName),
-			URI:        be.accountURI(u.ScreenName),
-			Name:       u.Name,
-			Email:      u.ScreenName + "@" + be.domain,
-			Summary:    u.Description,
-			ObjectType: activitystream.ObjectPerson,
-			Link: []activitystream.Link{
-				{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
-				{Rel: "avatar", Href: u.ProfileImageURL},
-				{Rel: "header", Href: u.ProfileBannerURL},
-			},
-			PreferredUsername: u.ScreenName,
-			DisplayName:       u.Name,
-			Note:              u.Description,
-		},
-	}
+	feed := be.newFeed(&u)
 
 	for _, tweet := range tweets {
-		createdAt, _ := tweet.CreatedAtTime()
-
-		// TODO: transform tweet to HTML
-		feed.Entry = append(feed.Entry, &activitystream.Entry{
-			ID:        "tag:" + be.domain + ",2017-04-23:tweet:" + tweet.IdStr,
-			Title:     "Tweet",
-			Published: activitystream.NewTime(createdAt),
-			Updated:   activitystream.NewTime(createdAt),
-			Link: []activitystream.Link{
-				{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)+"/status/"+tweet.IdStr},
-				{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: activitystream.CollectionPublic},
-			},
-			Content: &activitystream.Text{
-				Type: "text", // TODO: html
-				Lang: tweet.Lang,
-				Body: tweet.Text,
-			},
-			ObjectType: activitystream.ObjectNote,
-			Verb:       activitystream.VerbPost,
-		})
+		feed.Entry = append(feed.Entry, be.newEntryFromTweet(&u, &tweet))
 	}
 
 	return feed, nil
