@@ -153,6 +153,7 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 			ID:         be.accountURI(u.ScreenName),
 			URI:        be.accountURI(u.ScreenName),
 			Name:       u.Name,
+			Email:      u.ScreenName + "@" + be.domain,
 			Summary:    u.Description,
 			ObjectType: activitystream.ObjectPerson,
 			Link: []activitystream.Link{
