@@ -105,7 +105,16 @@ func (be *Backend) Unsubscribe(notifies chan<- *activitystream.Feed) error {
 }
 
 func (be *Backend) Notify(entry *activitystream.Entry) error {
-	return errors.New("Not yet implemented") // TODO
+	if entry.ObjectType != activitystream.ObjectActivity {
+		return errors.New("Unsupported object type")
+	}
+
+	switch entry.Verb {
+	case activitystream.VerbFollow, activitystream.VerbUnfollow:
+		return nil // Nothing to do
+	default:
+		return errors.New("Unsupported verb")
+	}
 }
 
 func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
