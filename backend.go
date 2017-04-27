@@ -181,6 +181,7 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 			},
 			Content: &activitystream.Text{
 				Type: "text/html",
+				Lang: tweet.Lang,
 				Body: tweet.Text,
 			},
 			ObjectType: activitystream.ObjectNote,
