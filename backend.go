@@ -180,7 +180,7 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 				{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: activitystream.CollectionPublic},
 			},
 			Content: &activitystream.Text{
-				Type: "text/html",
+				Type: "text", // TODO: html
 				Lang: tweet.Lang,
 				Body: tweet.Text,
 			},
