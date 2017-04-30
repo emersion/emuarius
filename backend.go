@@ -11,6 +11,8 @@ import (
 	"github.com/emersion/go-ostatus/activitystream"
 	"github.com/emersion/go-ostatus/salmon"
 	"github.com/emersion/go-ostatus/xrd"
+
+	"log"
 )
 
 func uriToUsername(uri string) string {
@@ -144,6 +146,12 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 		for update := range s.C {
 			switch update := update.(type) {
 			case anaconda.Tweet:
+				if update.User.IdStr != u.IdStr {
+					log.Printf("emuarius: ignoring tweet: %+v", update)
+					continue
+				}
+				log.Printf("emuarius: delivering: %+v", update)
+
 				feed := be.newFeed(&u)
 				feed.Entry = append(feed.Entry, be.newEntryFromTweet(&u, &update))
 				notifies <- feed
