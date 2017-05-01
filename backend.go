@@ -3,6 +3,7 @@ package emuarius
 import (
 	"errors"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,6 +42,64 @@ func profileURL(username string) string {
 
 func tweetURL(username, id string) string {
 	return profileURL(username) + "/status/" + id
+}
+
+func hashtagURL(hastag string) string {
+	return "https://twitter.com/hashtag/" + hastag
+}
+
+type entityURL struct {
+	Indices      []int
+	Url          string
+	Display_url  string
+	Expanded_url string
+}
+
+func formatTweet(tweet *anaconda.Tweet) string {
+	urls := tweet.Entities.Urls
+
+	for _, mention := range tweet.Entities.User_mentions {
+		urls = append(urls, entityURL{
+			Indices: mention.Indices,
+			Url: profileURL(mention.Screen_name),
+		})
+	}
+
+	for _, hashtag := range tweet.Entities.Hashtags {
+		urls = append(urls, entityURL{
+			Indices: hashtag.Indices,
+			Url: hashtagURL(hashtag.Text),
+		})
+	}
+
+	for _, media := range tweet.Entities.Media {
+		urls = append(urls, entityURL{
+			Indices: media.Indices,
+			Url: media.Media_url,
+		})
+	}
+
+	sort.Slice(urls, func(i, j int) bool {
+		return urls[i].Indices[0] < urls[j].Indices[0]
+	})
+
+	formatted := []rune(tweet.Text)
+	delta := 0
+	for _, u := range urls {
+		before := formatted[:u.Indices[0]+delta]
+		between := formatted[u.Indices[0]+delta:u.Indices[1]+delta]
+		after := formatted[u.Indices[1]+delta:]
+
+		insertBefore := `<a href="`+u.Url+`">`
+		insertAfter := `</a>`
+		delta += len(insertBefore) + len(insertAfter)
+
+		rest := insertBefore + string(between) + insertAfter + string(after)
+
+		formatted = append(before, []rune(rest)...)
+	}
+
+	return strings.Replace(string(formatted), "\n", "<br>", -1)
 }
 
 type subscription struct {
@@ -126,9 +185,9 @@ func (be *Backend) newEntryFromTweet(u *anaconda.User, tweet *anaconda.Tweet) *a
 			{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: activitystream.CollectionPublic},
 		},
 		Content: &activitystream.Text{
-			Type: "text", // TODO: html
+			Type: "html",
 			Lang: tweet.Lang,
-			Body: tweet.Text,
+			Body: formatTweet(tweet),
 		},
 	}
 
