@@ -40,7 +40,7 @@ func profileURL(username string) string {
 }
 
 type subscription struct {
-	stream   *anaconda.Stream
+	ticker   *time.Ticker
 	notifies chan<- *activitystream.Feed
 }
 
@@ -134,28 +134,45 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 		return err
 	}
 
-	v := make(url.Values)
-	v.Set("follow", u.IdStr)
-	s := be.api.PublicStreamFilter(v)
+	var lastId int64
+	var lastIdStr string
+	if u.Status != nil {
+		lastId = u.Status.Id
+		lastIdStr = u.Status.IdStr
+	}
 
-	be.topics[topicURL] = &subscription{s, notifies}
+	ticker := time.NewTicker(10*time.Second)
+	be.topics[topicURL] = &subscription{ticker, notifies}
 
 	go func() {
 		defer close(notifies)
 
-		for update := range s.C {
-			switch update := update.(type) {
-			case anaconda.Tweet:
-				if update.User.IdStr != u.IdStr {
-					log.Printf("emuarius: ignoring tweet: %+v", update)
-					continue
-				}
-				log.Printf("emuarius: delivering: %+v", update)
-
-				feed := be.newFeed(&u)
-				feed.Entry = append(feed.Entry, be.newEntryFromTweet(&u, &update))
-				notifies <- feed
+		for range ticker.C {
+			v := make(url.Values)
+			v.Set("user_id", u.IdStr)
+			v.Set("include_rts", "1")
+			v.Set("since_id", lastIdStr)
+			v.Set("count", "200")
+			tweets, err := be.api.GetUserTimeline(v)
+			if err != nil {
+				log.Println("emuarius: cannot poll user:", err)
+				continue
 			}
+
+			if len(tweets) == 0 {
+				continue
+			}
+
+			feed := be.newFeed(&u)
+			for _, tweet := range tweets {
+				feed.Entry = append(feed.Entry, be.newEntryFromTweet(&u, &tweet))
+
+				if tweet.Id > lastId {
+					lastId = tweet.Id
+					lastIdStr = tweet.IdStr
+				}
+			}
+			notifies <- feed
 		}
 	}()
 
@@ -166,7 +183,7 @@ func (be *Backend) Unsubscribe(notifies chan<- *activitystream.Feed) error {
 	for topic, sub := range be.topics {
 		if notifies == sub.notifies {
 			delete(be.topics, topic)
-			sub.stream.Stop()
+			sub.ticker.Stop()
 			return nil
 		}
 	}
@@ -199,7 +216,7 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 	}
 
 	v := make(url.Values)
-	v.Set("screen_name", u.ScreenName)
+	v.Set("user_id", u.IdStr)
 	v.Set("count", "20")
 	v.Set("include_rts", "1")
 	tweets, err := be.api.GetUserTimeline(v)
