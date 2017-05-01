@@ -39,6 +39,10 @@ func profileURL(username string) string {
 	return "https://twitter.com/" + username
 }
 
+func tweetURL(username, id string) string {
+	return profileURL(username) + "/status/" + id
+}
+
 type subscription struct {
 	ticker   *time.Ticker
 	notifies chan<- *activitystream.Feed
@@ -66,6 +70,10 @@ func (be *Backend) accountURI(username string) string {
 	return "acct:" + username + "@" + be.domain
 }
 
+func (be *Backend) tweetURI(id string) string {
+	return "tag:" + be.domain + ",2017-04-23:tweet:" + id
+}
+
 func (be *Backend) newFeed(u *anaconda.User) *activitystream.Feed {
 	feedURL := be.rootURL + feedPath(u.ScreenName)
 
@@ -82,35 +90,39 @@ func (be *Backend) newFeed(u *anaconda.User) *activitystream.Feed {
 			// TODO: rel=next
 			{Rel: ostatus.LinkSalmon, Href: be.rootURL + ostatus.SalmonPath},
 		},
-		Author: &activitystream.Person{
-			ID:         be.accountURI(u.ScreenName),
-			URI:        be.accountURI(u.ScreenName),
-			Name:       u.Name,
-			Email:      u.ScreenName + "@" + be.domain,
-			Summary:    u.Description,
-			ObjectType: activitystream.ObjectPerson,
-			Link: []activitystream.Link{
-				{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
-				{Rel: "avatar", Href: u.ProfileImageURL},
-				{Rel: "header", Href: u.ProfileBannerURL},
-			},
-			PreferredUsername: u.ScreenName,
-			DisplayName:       u.Name,
-			Note:              u.Description,
+		Author: be.newPerson(u),
+	}
+}
+
+func (be *Backend) newPerson(u *anaconda.User) *activitystream.Person {
+	return &activitystream.Person{
+		ID:         be.accountURI(u.ScreenName),
+		URI:        be.accountURI(u.ScreenName),
+		Name:       u.Name,
+		Email:      u.ScreenName + "@" + be.domain,
+		Summary:    u.Description,
+		ObjectType: activitystream.ObjectPerson,
+		Link: []activitystream.Link{
+			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
+			{Rel: "avatar", Href: u.ProfileImageURL},
+			{Rel: "header", Href: u.ProfileBannerURL},
 		},
+		PreferredUsername: u.ScreenName,
+		DisplayName:       u.Name,
+		Note:              u.Description,
 	}
 }
 
 func (be *Backend) newEntryFromTweet(u *anaconda.User, tweet *anaconda.Tweet) *activitystream.Entry {
 	createdAt, _ := tweet.CreatedAtTime()
 
-	return &activitystream.Entry{
-		ID:        "tag:" + be.domain + ",2017-04-23:tweet:" + tweet.IdStr,
+	entry := &activitystream.Entry{
+		ID:        be.tweetURI(tweet.IdStr),
 		Title:     "Tweet",
 		Published: activitystream.NewTime(createdAt),
 		Updated:   activitystream.NewTime(createdAt),
 		Link: []activitystream.Link{
-			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)+"/status/"+tweet.IdStr},
+			{Rel: "alternate", Type: "text/html", Href: tweetURL(u.ScreenName, tweet.IdStr)},
 			{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: activitystream.CollectionPublic},
 		},
 		Content: &activitystream.Text{
@@ -118,9 +130,42 @@ func (be *Backend) newEntryFromTweet(u *anaconda.User, tweet *anaconda.Tweet) *a
 			Lang: tweet.Lang,
 			Body: tweet.Text,
 		},
-		ObjectType: activitystream.ObjectNote,
-		Verb:       activitystream.VerbPost,
 	}
+
+	if u.Id != tweet.User.Id {
+		entry.Author = be.newPerson(&tweet.User)
+	}
+
+	if tweet.RetweetedStatus != nil {
+		entry.Title = "Retweet"
+		entry.ObjectType = activitystream.ObjectActivity
+		entry.Verb = activitystream.VerbShare
+		entry.Object = be.newEntryFromTweet(u, tweet.RetweetedStatus)
+	} else if tweet.InReplyToStatusID != 0 {
+		entry.Title = "Reply"
+		entry.ObjectType = activitystream.ObjectComment
+		entry.Verb = activitystream.VerbPost
+
+		entry.InReplyTo = &activitystream.InReplyTo{
+			Ref: be.tweetURI(tweet.InReplyToStatusIdStr),
+			Href: tweetURL(u.ScreenName, tweet.IdStr),
+			Type: "text/html",
+		}
+
+		for _, mention := range tweet.Entities.User_mentions {
+			entry.Link = append(entry.Link, activitystream.Link{
+				Rel: "mentioned",
+				ObjectType: activitystream.ObjectPerson,
+				Href: be.accountURI(mention.Screen_name),
+			})
+		}
+	} else {
+		entry.Title = "Tweet"
+		entry.ObjectType = activitystream.ObjectNote
+		entry.Verb = activitystream.VerbPost
+	}
+
+	return entry
 }
 
 func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Feed) error {
@@ -141,7 +186,7 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 		lastIdStr = u.Status.IdStr
 	}
 
-	ticker := time.NewTicker(10*time.Second)
+	ticker := time.NewTicker(5*time.Minute)
 	be.topics[topicURL] = &subscription{ticker, notifies}
 
 	go func() {
