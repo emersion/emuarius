@@ -136,12 +136,17 @@ func (be *Backend) tweetURI(id string) string {
 func (be *Backend) newFeed(u *anaconda.User) *activitystream.Feed {
 	feedURL := be.rootURL + feedPath(u.ScreenName)
 
+	updated := time.Now()
+	if u.Status != nil {
+		updated, _ = u.Status.CreatedAtTime()
+	}
+
 	return &activitystream.Feed{
 		ID:       feedURL,
 		Title:    u.Name,
 		Subtitle: u.Description,
 		Logo:     u.ProfileImageURL,
-		Updated:  activitystream.NewTime(time.Now()), // TODO
+		Updated:  activitystream.NewTime(updated),
 		Link: []activitystream.Link{
 			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
 			{Rel: "self", Type: "application/atom+xml", Href: feedURL},
@@ -267,15 +272,19 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 				continue
 			}
 
-			feed := be.newFeed(&u)
+			entries := make([]*activitystream.Entry, 0, len(tweets))
 			for _, tweet := range tweets {
-				feed.Entry = append(feed.Entry, be.newEntryFromTweet(&u, &tweet))
+				entries = append(entries, be.newEntryFromTweet(&u, &tweet))
 
 				if tweet.Id > lastId {
 					lastId = tweet.Id
 					lastIdStr = tweet.IdStr
+					u.Status = &tweet
 				}
 			}
+
+			feed := be.newFeed(&u)
+			feed.Entry = entries
 			notifies <- feed
 		}
 	}()
