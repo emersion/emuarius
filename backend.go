@@ -1,6 +1,11 @@
 package emuarius
 
 import (
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/binary"
 	"errors"
 	"net/url"
 	"sort"
@@ -8,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ChimeraCoder/anaconda"
+	"github.com/boltdb/bolt"
 	"github.com/emersion/go-ostatus"
 	"github.com/emersion/go-ostatus/activitystream"
 	"github.com/emersion/go-ostatus/salmon"
@@ -15,6 +21,10 @@ import (
 
 	"log"
 )
+
+const keyBits = 2048
+
+var keysBucket = []byte("RSAKeys")
 
 func uriToUsername(uri string) string {
 	u, err := url.Parse(uri)
@@ -48,6 +58,12 @@ func hashtagURL(hastag string) string {
 	return "https://twitter.com/hashtag/" + hastag
 }
 
+func itob(v int64) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(v))
+	return b
+}
+
 type entityURL struct {
 	Indices      []int
 	Url          string
@@ -61,21 +77,21 @@ func formatTweet(tweet *anaconda.Tweet) string {
 	for _, mention := range tweet.Entities.User_mentions {
 		urls = append(urls, entityURL{
 			Indices: mention.Indices,
-			Url: profileURL(mention.Screen_name),
+			Url:     profileURL(mention.Screen_name),
 		})
 	}
 
 	for _, hashtag := range tweet.Entities.Hashtags {
 		urls = append(urls, entityURL{
 			Indices: hashtag.Indices,
-			Url: hashtagURL(hashtag.Text),
+			Url:     hashtagURL(hashtag.Text),
 		})
 	}
 
 	for _, media := range tweet.Entities.Media {
 		urls = append(urls, entityURL{
 			Indices: media.Indices,
-			Url: media.Media_url,
+			Url:     media.Media_url,
 		})
 	}
 
@@ -87,10 +103,10 @@ func formatTweet(tweet *anaconda.Tweet) string {
 	delta := 0
 	for _, u := range urls {
 		before := formatted[:u.Indices[0]+delta]
-		between := formatted[u.Indices[0]+delta:u.Indices[1]+delta]
+		between := formatted[u.Indices[0]+delta : u.Indices[1]+delta]
 		after := formatted[u.Indices[1]+delta:]
 
-		insertBefore := `<a href="`+u.Url+`">`
+		insertBefore := `<a href="` + u.Url + `">`
 		insertAfter := `</a>`
 		delta += len(insertBefore) + len(insertAfter)
 
@@ -109,16 +125,18 @@ type subscription struct {
 
 type Backend struct {
 	api     *anaconda.TwitterApi
+	db      *bolt.DB
 	rootURL string
 	domain  string
 	topics  map[string]*subscription
 }
 
-func NewBackend(api *anaconda.TwitterApi, rootURL string) *Backend {
+func NewBackend(api *anaconda.TwitterApi, db *bolt.DB, rootURL string) *Backend {
 	u, _ := url.Parse(rootURL)
 
 	return &Backend{
 		api:     api,
+		db:      db,
 		rootURL: rootURL,
 		domain:  u.Host,
 		topics:  make(map[string]*subscription),
@@ -211,16 +229,16 @@ func (be *Backend) newEntryFromTweet(u *anaconda.User, tweet *anaconda.Tweet) *a
 		entry.Verb = activitystream.VerbPost
 
 		entry.InReplyTo = &activitystream.InReplyTo{
-			Ref: be.tweetURI(tweet.InReplyToStatusIdStr),
+			Ref:  be.tweetURI(tweet.InReplyToStatusIdStr),
 			Href: tweetURL(u.ScreenName, tweet.IdStr),
 			Type: "text/html",
 		}
 
 		for _, mention := range tweet.Entities.User_mentions {
 			entry.Link = append(entry.Link, activitystream.Link{
-				Rel: "mentioned",
+				Rel:        "mentioned",
 				ObjectType: activitystream.ObjectPerson,
-				Href: be.accountURI(mention.Screen_name),
+				Href:       be.accountURI(mention.Screen_name),
 			})
 		}
 	} else {
@@ -250,7 +268,7 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 		lastIdStr = u.Status.IdStr
 	}
 
-	ticker := time.NewTicker(5*time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	be.topics[topicURL] = &subscription{ticker, notifies}
 
 	go func() {
@@ -353,10 +371,41 @@ func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
 		return nil, err
 	}
 
-	// TODO: retrieve public key
-	publicKey, _ := salmon.ParsePublicKey("RSA.mVgY8RN6URBTstndvmUUPb4UZTdwvwmddSKE5z_jvKUEK6yk1u3rrC9yN8k6FilGj9K0eeUPe2hf4Pj-5CmHww.AQAB")
+	var pub crypto.PublicKey
+	err = be.db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists(keysBucket)
+		if err != nil {
+			return err
+		}
 
-	publicKeyURL, err := salmon.PublicKeyDataURL(publicKey)
+		k := itob(u.Id)
+		v := b.Get(k)
+		var priv *rsa.PrivateKey
+		if v == nil {
+			priv, err = rsa.GenerateKey(rand.Reader, keyBits)
+			if err != nil {
+				return err
+			}
+
+			v = x509.MarshalPKCS1PrivateKey(priv)
+			if err := b.Put(k, v); err != nil {
+				return err
+			}
+		} else {
+			priv, err = x509.ParsePKCS1PrivateKey(v)
+			if err != nil {
+				return err
+			}
+		}
+
+		pub = priv.Public()
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	publicKeyURL, err := salmon.PublicKeyDataURL(pub)
 	if err != nil {
 		return nil, err
 	}
