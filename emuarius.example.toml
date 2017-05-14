@@ -1,0 +1,8 @@
+address = ":4004"
+rootURL = "http://localhost:4004"
+
+[twitter]
+consumerKey = ""
+consumerSecret = ""
+accessToken = ""
+accessTokenSecret = ""

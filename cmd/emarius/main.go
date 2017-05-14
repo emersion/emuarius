@@ -3,36 +3,58 @@ package main
 import (
 	"log"
 	"net/http"
+	"io/ioutil"
 
 	"github.com/boltdb/bolt"
 	"github.com/ChimeraCoder/anaconda"
 	"github.com/emersion/emuarius"
 	"github.com/emersion/go-ostatus"
+	"github.com/pelletier/go-toml"
 )
 
-func main() {
-	dbPath := "emuarius.db"
-	addr := ":4004"
-	rootURL := "http://localhost:4004"
+type config struct {
+	Address string `toml:"address"`
+	RootURL string `toml:"rootURL"`
 
-	db, err := bolt.Open(dbPath, 0600, nil)
+	Twitter struct {
+		ConsumerKey string `toml:"consumerKey"`
+		ConsumerSecret string `toml:"consumerSecret"`
+		AccessToken string `toml:"accessToken"`
+		AccessTokenSecret string `toml:"accessTokenSecret"`
+	} `toml:"twitter"`
+}
+
+const databasePath = "emuarius.db"
+
+func main() {
+	b, err := ioutil.ReadFile("emuarius.toml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var cfg config
+	if err := toml.Unmarshal(b, &cfg); err != nil {
+		log.Fatal(err)
+	}
+
+	db, err := bolt.Open(databasePath, 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	anaconda.SetConsumerKey("your-consumer-key")
-	anaconda.SetConsumerSecret("your-consumer-secret")
-	api := anaconda.NewTwitterApi("your-access-token", "your-access-token-secret")
-	be := emuarius.NewBackend(api, db, rootURL)
-	h := ostatus.NewHandler(be, rootURL)
+	anaconda.SetConsumerKey(cfg.Twitter.ConsumerKey)
+	anaconda.SetConsumerSecret(cfg.Twitter.ConsumerSecret)
+	api := anaconda.NewTwitterApi(cfg.Twitter.AccessToken, cfg.Twitter.AccessTokenSecret)
+	be := emuarius.NewBackend(api, db, cfg.RootURL)
+	h := ostatus.NewHandler(be, cfg.RootURL)
 
 	s := &http.Server{
-		Addr:    addr,
+		Addr:    cfg.Address,
 		Handler: h,
 	}
 
-	log.Println("Starting server at", addr)
+	log.Println("Starting server at", cfg.Address)
 	if err := s.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
