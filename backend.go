@@ -23,6 +23,7 @@ import (
 )
 
 const keyBits = 2048
+const pollInterval = 15 * time.Minute
 
 var keysBucket = []byte("RSAKeys")
 
@@ -268,7 +269,7 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 		lastIdStr = u.Status.IdStr
 	}
 
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(pollInterval)
 	be.topics[topicURL] = &subscription{ticker, notifies}
 
 	go func() {
