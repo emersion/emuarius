@@ -49,6 +49,10 @@ func main() {
 	be := emuarius.NewBackend(api, db, cfg.RootURL)
 	h := ostatus.NewHandler(be, cfg.RootURL)
 
+	if err := emuarius.NewSubscriptionDB(h.Publisher, db); err != nil {
+		log.Fatal(err)
+	}
+
 	s := &http.Server{
 		Addr:    cfg.Address,
 		Handler: h,
