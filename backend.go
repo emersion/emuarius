@@ -125,6 +125,8 @@ type subscription struct {
 }
 
 type Backend struct {
+	salmon.PublicKeyBackend
+
 	api     *anaconda.TwitterApi
 	db      *bolt.DB
 	rootURL string
@@ -136,6 +138,7 @@ func NewBackend(api *anaconda.TwitterApi, db *bolt.DB, rootURL string) *Backend 
 	u, _ := url.Parse(rootURL)
 
 	return &Backend{
+		PublicKeyBackend: salmon.NewPublicKeyBackend(),
 		api:     api,
 		db:      db,
 		rootURL: rootURL,
@@ -406,7 +409,7 @@ func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
 		return nil, err
 	}
 
-	publicKeyURL, err := salmon.PublicKeyDataURL(pub)
+	publicKeyURL, err := salmon.FormatPublicKeyDataURL(pub)
 	if err != nil {
 		return nil, err
 	}
