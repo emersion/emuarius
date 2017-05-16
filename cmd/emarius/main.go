@@ -47,7 +47,7 @@ func main() {
 	anaconda.SetConsumerSecret(cfg.Twitter.ConsumerSecret)
 	api := anaconda.NewTwitterApi(cfg.Twitter.AccessToken, cfg.Twitter.AccessTokenSecret)
 	be := emuarius.NewBackend(api, db, cfg.RootURL)
-	h := ostatus.NewHandler(be, cfg.RootURL)
+	h := ostatus.NewHandler(be, emuarius.HostMeta(cfg.RootURL))
 
 	if err := emuarius.NewSubscriptionDB(h.Publisher, db); err != nil {
 		log.Fatal(err)

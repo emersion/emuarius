@@ -16,8 +16,11 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/emersion/go-ostatus"
 	"github.com/emersion/go-ostatus/activitystream"
+	"github.com/emersion/go-ostatus/pubsubhubbub"
 	"github.com/emersion/go-ostatus/salmon"
 	"github.com/emersion/go-ostatus/xrd"
+	"github.com/emersion/go-ostatus/xrd/lrdd"
+	"github.com/emersion/go-ostatus/xrd/webfinger"
 
 	"log"
 )
@@ -57,6 +60,14 @@ func tweetURL(username, id string) string {
 
 func hashtagURL(hastag string) string {
 	return "https://twitter.com/hashtag/" + hastag
+}
+
+func HostMeta(rootURL string) *xrd.Resource {
+	return &xrd.Resource{
+		Links: []*xrd.Link{
+			{Rel: lrdd.Rel, Type: "application/jrd+json", Template: rootURL + webfinger.WellKnownPathTemplate},
+		},
+	}
 }
 
 func itob(v int64) []byte {
@@ -172,9 +183,9 @@ func (be *Backend) newFeed(u *anaconda.User) *activitystream.Feed {
 		Link: []activitystream.Link{
 			{Rel: "alternate", Type: "text/html", Href: profileURL(u.ScreenName)},
 			{Rel: "self", Type: "application/atom+xml", Href: feedURL},
-			{Rel: "hub", Href: be.rootURL + ostatus.HubPath},
+			{Rel: pubsubhubbub.RelHub, Href: be.rootURL + ostatus.HubPath},
 			// TODO: rel=next
-			{Rel: ostatus.LinkSalmon, Href: be.rootURL + ostatus.SalmonPath},
+			{Rel: salmon.Rel, Href: be.rootURL + ostatus.SalmonPath},
 		},
 		Author: be.newPerson(u),
 	}
@@ -420,10 +431,10 @@ func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
 		Subject: accountURI,
 		Aliases: []string{profileURL},
 		Links: []*xrd.Link{
-			{Rel: ostatus.LinkProfilePage, Type: "text/html", Href: profileURL},
-			{Rel: ostatus.LinkUpdatesFrom, Type: "application/atom+xml", Href: be.rootURL + feedPath(u.ScreenName)},
-			{Rel: ostatus.LinkSalmon, Href: be.rootURL + ostatus.SalmonPath},
-			{Rel: ostatus.LinkMagicPublicKey, Href: publicKeyURL},
+			{Rel: webfinger.RelProfilePage, Type: "text/html", Href: profileURL},
+			{Rel: pubsubhubbub.RelUpdatesFrom, Type: "application/atom+xml", Href: be.rootURL + feedPath(u.ScreenName)},
+			{Rel: salmon.Rel, Href: be.rootURL + ostatus.SalmonPath},
+			{Rel: salmon.RelMagicPublicKey, Href: publicKeyURL},
 		},
 	}
 	return resource, nil
