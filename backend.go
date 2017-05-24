@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -44,6 +45,20 @@ func uriToUsername(uri string) string {
 		return strings.TrimSuffix(strings.Trim(u.Path, "/@"), ".atom")
 	}
 	return ""
+}
+
+func uriToTweet(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return ""
+	}
+
+	_, id := path.Split(u.Path)
+	_, dirname := path.Split(path.Dir(u.Path))
+	if dirname != "status" {
+		return ""
+	}
+	return id
 }
 
 func feedPath(username string) string {
@@ -350,12 +365,7 @@ func (be *Backend) Notify(entry *activitystream.Entry) error {
 	}
 }
 
-func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
-	username := uriToUsername(topicURL)
-	if username == "" {
-		return nil, errors.New("Invalid topic")
-	}
-
+func (be *Backend) userFeed(username string) (*activitystream.Feed, error) {
 	u, err := be.api.GetUsersShow(username, make(url.Values))
 	if err != nil {
 		return nil, err
@@ -377,6 +387,21 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 	}
 
 	return feed, nil
+}
+
+func (be *Backend) tweetFeed(tweetID string) (*activitystream.Feed, error) {
+	
+}
+
+func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
+	if tweetID := uriToTweet(topicURL); tweetID != "" {
+		return be.tweetFeed(tweetID)
+	}
+	if username := uriToUsername(topicURL); username != "" {
+		return be.userFeed(username)
+	}
+
+	return nil, errors.New("Invalid topic")
 }
 
 func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
