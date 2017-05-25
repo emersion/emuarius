@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,11 +59,15 @@ func uriToTweet(uri string) string {
 	if dirname != "status" {
 		return ""
 	}
-	return id
+	return strings.TrimSuffix(id, ".atom")
 }
 
-func feedPath(username string) string {
+func profileFeedPath(username string) string {
 	return "/@" + username + ".atom"
+}
+
+func tweetFeedPath(username, tweetID string) string {
+	return "/@" + username + "/status/" + tweetID + ".atom"
 }
 
 func profileURL(username string) string {
@@ -181,8 +186,8 @@ func (be *Backend) tweetURI(id string) string {
 	return "tag:" + be.domain + ",2017-04-23:tweet:" + id
 }
 
-func (be *Backend) newFeed(u *anaconda.User) *activitystream.Feed {
-	feedURL := be.rootURL + feedPath(u.ScreenName)
+func (be *Backend) newProfileFeed(u *anaconda.User) *activitystream.Feed {
+	feedURL := be.rootURL + profileFeedPath(u.ScreenName)
 
 	updated := time.Now()
 	if u.Status != nil {
@@ -228,18 +233,24 @@ func (be *Backend) newPerson(u *anaconda.User) *activitystream.Person {
 func (be *Backend) newEntryFromTweet(u *anaconda.User, tweet *anaconda.Tweet) *activitystream.Entry {
 	createdAt, _ := tweet.CreatedAtTime()
 
+	var lang string
+	if tweet.Lang != "und" {
+		lang = tweet.Lang
+	}
+
 	entry := &activitystream.Entry{
 		ID:        be.tweetURI(tweet.IdStr),
 		Title:     "Tweet",
 		Published: activitystream.NewTime(createdAt),
 		Updated:   activitystream.NewTime(createdAt),
 		Link: []activitystream.Link{
+			{Rel: "self", Type: "application/atom+xml", Href: be.rootURL + tweetFeedPath(u.ScreenName, tweet.IdStr)},
 			{Rel: "alternate", Type: "text/html", Href: tweetURL(u.ScreenName, tweet.IdStr)},
 			{Rel: "mentioned", ObjectType: activitystream.ObjectCollection, Href: activitystream.CollectionPublic},
 		},
 		Content: &activitystream.Text{
 			Type: "html",
-			Lang: tweet.Lang,
+			Lang: lang,
 			Body: formatTweet(tweet),
 		},
 	}
@@ -331,7 +342,7 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 				}
 			}
 
-			feed := be.newFeed(&u)
+			feed := be.newProfileFeed(&u)
 			feed.Entry = entries
 			notifies <- feed
 		}
@@ -365,7 +376,7 @@ func (be *Backend) Notify(entry *activitystream.Entry) error {
 	}
 }
 
-func (be *Backend) userFeed(username string) (*activitystream.Feed, error) {
+func (be *Backend) profileFeed(username string) (*activitystream.Feed, error) {
 	u, err := be.api.GetUsersShow(username, make(url.Values))
 	if err != nil {
 		return nil, err
@@ -380,17 +391,29 @@ func (be *Backend) userFeed(username string) (*activitystream.Feed, error) {
 		return nil, err
 	}
 
-	feed := be.newFeed(&u)
-
+	feed := be.newProfileFeed(&u)
 	for _, tweet := range tweets {
 		feed.Entry = append(feed.Entry, be.newEntryFromTweet(&u, &tweet))
 	}
-
 	return feed, nil
 }
 
 func (be *Backend) tweetFeed(tweetID string) (*activitystream.Feed, error) {
-	
+	id, err := strconv.ParseInt(tweetID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	tweet, err := be.api.GetTweet(id, make(url.Values))
+	if err != nil {
+		return nil, err
+	}
+
+	entry := be.newEntryFromTweet(&tweet.User, &tweet)
+	entry.Author = be.newPerson(&tweet.User)
+
+	feed := &activitystream.Feed{Entry: []*activitystream.Entry{entry}}
+	return feed, nil
 }
 
 func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
@@ -398,7 +421,7 @@ func (be *Backend) Feed(topicURL string) (*activitystream.Feed, error) {
 		return be.tweetFeed(tweetID)
 	}
 	if username := uriToUsername(topicURL); username != "" {
-		return be.userFeed(username)
+		return be.profileFeed(username)
 	}
 
 	return nil, errors.New("Invalid topic")
@@ -457,7 +480,7 @@ func (be *Backend) Resource(uri string, rel []string) (*xrd.Resource, error) {
 		Aliases: []string{profileURL},
 		Links: []*xrd.Link{
 			{Rel: webfinger.RelProfilePage, Type: "text/html", Href: profileURL},
-			{Rel: pubsubhubbub.RelUpdatesFrom, Type: "application/atom+xml", Href: be.rootURL + feedPath(u.ScreenName)},
+			{Rel: pubsubhubbub.RelUpdatesFrom, Type: "application/atom+xml", Href: be.rootURL + profileFeedPath(u.ScreenName)},
 			{Rel: salmon.Rel, Href: be.rootURL + ostatus.SalmonPath},
 			{Rel: salmon.RelMagicPublicKey, Href: publicKeyURL},
 		},
