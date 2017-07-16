@@ -152,7 +152,7 @@ func formatTweet(tweet *anaconda.Tweet) string {
 
 type subscription struct {
 	ticker   *time.Ticker
-	notifies chan<- *activitystream.Feed
+	notifies chan<- pubsubhubbub.Event
 }
 
 type Backend struct {
@@ -291,7 +291,7 @@ func (be *Backend) newEntryFromTweet(u *anaconda.User, tweet *anaconda.Tweet) *a
 	return entry
 }
 
-func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Feed) error {
+func (be *Backend) Subscribe(topicURL string, notifies chan<- pubsubhubbub.Event) error {
 	username := uriToUsername(topicURL)
 	if username == "" {
 		return errors.New("Invalid topic")
@@ -351,7 +351,7 @@ func (be *Backend) Subscribe(topicURL string, notifies chan<- *activitystream.Fe
 	return nil
 }
 
-func (be *Backend) Unsubscribe(notifies chan<- *activitystream.Feed) error {
+func (be *Backend) Unsubscribe(notifies chan<- pubsubhubbub.Event) error {
 	for topic, sub := range be.topics {
 		if notifies == sub.notifies {
 			delete(be.topics, topic)
