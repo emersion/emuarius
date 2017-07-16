@@ -1,6 +1,6 @@
 # emuarius
 
-Bridge between Twitter and Mastodon (or any OStatus-compliant instance).
+Bridge between Twitter and Mastodon (or any OStatus-compliant instance). Powered by [go-ostatus](https://github.com/emersion/go-ostatus).
 
 For the moment, this is a read-only bridge: you'll be able to see Twitter
 activity from Mastodon, but you won't be able to interact with it.
