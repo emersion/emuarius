@@ -143,9 +143,18 @@ func formatTweet(tweet *anaconda.Tweet) string {
 	formatted := []rune(tweet.Text)
 	delta := 0
 	for _, u := range urls {
-		before := formatted[:u.Indices[0]+delta]
-		between := formatted[u.Indices[0]+delta : u.Indices[1]+delta]
-		after := formatted[u.Indices[1]+delta:]
+		var before []rune
+		var between []rune
+		var after []rune
+
+		if len(u.Indices) > 0 && len(formatted) > u.Indices[0]+delta {
+			before = formatted[:u.Indices[0]+delta]
+		}
+
+		if len(u.Indices) > 1 && len(formatted) > u.Indices[1]+delta {
+			between = formatted[u.Indices[0]+delta : u.Indices[1]+delta]
+			after = formatted[u.Indices[1]+delta:]
+		}
 
 		insertBefore := `<a href="` + u.URL + `">`
 		insertAfter := `</a>`
