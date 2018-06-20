@@ -97,33 +97,42 @@ func itob(v int64) []byte {
 }
 
 type entityURL struct {
-	Indices      []int
-	Url          string
-	Display_url  string
-	Expanded_url string
+	Indices     []int
+	URL         string
+	DisplayURL  string
+	ExpandedURL string
 }
 
 func formatTweet(tweet *anaconda.Tweet) string {
-	urls := tweet.Entities.Urls
+	var urls []entityURL
+
+	for _, url := range tweet.Entities.Urls {
+		urls = append(urls, entityURL{
+			Indices:     url.Indices,
+			URL:         url.Url,
+			DisplayURL:  url.Display_url,
+			ExpandedURL: url.Expanded_url,
+		})
+	}
 
 	for _, mention := range tweet.Entities.User_mentions {
 		urls = append(urls, entityURL{
 			Indices: mention.Indices,
-			Url:     profileURL(mention.Screen_name),
+			URL:     profileURL(mention.Screen_name),
 		})
 	}
 
 	for _, hashtag := range tweet.Entities.Hashtags {
 		urls = append(urls, entityURL{
 			Indices: hashtag.Indices,
-			Url:     hashtagURL(hashtag.Text),
+			URL:     hashtagURL(hashtag.Text),
 		})
 	}
 
 	for _, media := range tweet.Entities.Media {
 		urls = append(urls, entityURL{
 			Indices: media.Indices,
-			Url:     media.Media_url,
+			URL:     media.Media_url,
 		})
 	}
 
@@ -138,7 +147,7 @@ func formatTweet(tweet *anaconda.Tweet) string {
 		between := formatted[u.Indices[0]+delta : u.Indices[1]+delta]
 		after := formatted[u.Indices[1]+delta:]
 
-		insertBefore := `<a href="` + u.Url + `">`
+		insertBefore := `<a href="` + u.URL + `">`
 		insertAfter := `</a>`
 		delta += len(insertBefore) + len(insertAfter)
 
@@ -170,11 +179,11 @@ func NewBackend(api *anaconda.TwitterApi, db *bolt.DB, rootURL string) *Backend 
 
 	return &Backend{
 		PublicKeyBackend: salmon.NewPublicKeyBackend(),
-		api:     api,
-		db:      db,
-		rootURL: rootURL,
-		domain:  u.Host,
-		topics:  make(map[string]*subscription),
+		api:              api,
+		db:               db,
+		rootURL:          rootURL,
+		domain:           u.Host,
+		topics:           make(map[string]*subscription),
 	}
 }
 
