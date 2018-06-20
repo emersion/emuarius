@@ -64,14 +64,14 @@ func getConf(path string) Config {
 	var toml = readToml(path)
 
 	return Config{
-		DatabasePath: getFirstNonEmpty(os.Getenv("EMUARIS_DATABASE_PATH"), toml.DatabasePath, "./emuarius.db"),
-		Address:      getFirstNonEmpty(os.Getenv("EMUARIS_ADDRESS"), toml.Address, getHerokuAddress(), ":4004"),
-		RootURL:      getFirstNonEmpty(os.Getenv("EMUARIS_ROOT_URL"), toml.RootURL, "http://localhost:4004"),
+		DatabasePath: getFirstNonEmpty(os.Getenv("EMUARIUS_DATABASE_PATH"), toml.DatabasePath, "./emuarius.db"),
+		Address:      getFirstNonEmpty(os.Getenv("EMUARIUS_ADDRESS"), toml.Address, getHerokuAddress(), ":4004"),
+		RootURL:      getFirstNonEmpty(os.Getenv("EMUARIUS_ROOT_URL"), toml.RootURL, "http://localhost:4004"),
 		TwitterConfig: TwitterConfig{
-			ConsumerKey:       getFirstNonEmpty(os.Getenv("EMUARIS_TWITTER_CONSUMER_KEY"), toml.TwitterConfig.ConsumerKey),
-			ConsumerSecret:    getFirstNonEmpty(os.Getenv("EMUARIS_TWITTER_CONSUMER_SECRET"), toml.TwitterConfig.ConsumerSecret),
-			AccessToken:       getFirstNonEmpty(os.Getenv("EMUARIS_TWITTER_ACCESS_TOKEN"), toml.TwitterConfig.AccessToken),
-			AccessTokenSecret: getFirstNonEmpty(os.Getenv("EMUARIS_TWITTER_ACCESS_TOKEN_SECRET"), toml.TwitterConfig.AccessTokenSecret),
+			ConsumerKey:       getFirstNonEmpty(os.Getenv("EMUARIUS_TWITTER_CONSUMER_KEY"), toml.TwitterConfig.ConsumerKey),
+			ConsumerSecret:    getFirstNonEmpty(os.Getenv("EMUARIUS_TWITTER_CONSUMER_SECRET"), toml.TwitterConfig.ConsumerSecret),
+			AccessToken:       getFirstNonEmpty(os.Getenv("EMUARIUS_TWITTER_ACCESS_TOKEN"), toml.TwitterConfig.AccessToken),
+			AccessTokenSecret: getFirstNonEmpty(os.Getenv("EMUARIUS_TWITTER_ACCESS_TOKEN_SECRET"), toml.TwitterConfig.AccessTokenSecret),
 		},
 	}
 }
