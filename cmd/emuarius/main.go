@@ -50,12 +50,22 @@ func readToml(path string) Config {
 	return cfg
 }
 
+func getHerokuAddress() string {
+	var port = os.Getenv("PORT")
+
+	if port != "" {
+		port = fmt.Sprintf("0.0.0.0:%s", port)
+	}
+
+	return port
+}
+
 func getConf(path string) Config {
 	var toml = readToml(path)
 
 	return Config{
 		DatabasePath: getFirstNonEmpty(os.Getenv("EMUARIS_DATABASE_PATH"), toml.DatabasePath, "./emuarius.db"),
-		Address:      getFirstNonEmpty(os.Getenv("EMUARIS_ADDRESS"), toml.Address, ":4004"),
+		Address:      getFirstNonEmpty(os.Getenv("EMUARIS_ADDRESS"), toml.Address, getHerokuAddress(), ":4004"),
 		RootURL:      getFirstNonEmpty(os.Getenv("EMUARIS_ROOT_URL"), toml.RootURL, "http://localhost:4004"),
 		TwitterConfig: TwitterConfig{
 			ConsumerKey:       getFirstNonEmpty(os.Getenv("EMUARIS_TWITTER_CONSUMER_KEY"), toml.TwitterConfig.ConsumerKey),
