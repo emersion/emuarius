@@ -14,6 +14,7 @@ RUN go build -o emuarius cmd/emuarius/main.go
 RUN ls -la
 
 FROM alpine:3.7
+RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /go/src/github.com/emersion/emuarius/emuarius /app/emuarius
 RUN chmod +x emuarius
